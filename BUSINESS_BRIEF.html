@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Split Payment App - Business Brief</title>
+    <style>
+      :root {
+        --ink: #1d252c;
+        --muted: #637181;
+        --line: #d9e1e8;
+        --panel: #ffffff;
+        --soft: #f5f8fb;
+        --brand: #16615a;
+        --brand-2: #2663a6;
+        --accent: #c47f28;
+        --risk: #b74040;
+        --ok: #2d7b4f;
+        --shadow: 0 18px 50px rgba(29, 37, 44, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: var(--soft);
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--brand-2);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        gap: 28px;
+        align-items: stretch;
+        margin-bottom: 28px;
+      }
+
+      .hero-main,
+      .panel,
+      .card,
+      .mini-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .hero-main {
+        padding: 34px;
+      }
+
+      .eyebrow {
+        color: var(--brand);
+        font-size: 13px;
+        font-weight: 750;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.15;
+      }
+
+      h1 {
+        max-width: 780px;
+        margin-top: 12px;
+        font-size: clamp(34px, 5vw, 62px);
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 28px;
+      }
+
+      h3 {
+        font-size: 18px;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .hero-copy {
+        max-width: 760px;
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 26px;
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        padding: 0 16px;
+        color: var(--ink);
+        background: #fff;
+        font-weight: 700;
+      }
+
+      .button.primary {
+        border-color: var(--brand);
+        color: #fff;
+        background: var(--brand);
+      }
+
+      .brief-card {
+        padding: 24px;
+      }
+
+      .brief-card .metric {
+        margin-top: 18px;
+        padding: 16px;
+        border-radius: 8px;
+        background: #edf7f4;
+        border: 1px solid #cae3dd;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 28px;
+      }
+
+      .section {
+        margin-top: 26px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 14px;
+      }
+
+      .section-header p {
+        max-width: 660px;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .panel {
+        padding: 22px;
+      }
+
+      .card {
+        padding: 20px;
+      }
+
+      .mini-card {
+        padding: 16px;
+        box-shadow: none;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border-radius: 999px;
+        padding: 0 10px;
+        color: var(--ink);
+        background: #eef3f7;
+        border: 1px solid var(--line);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .tag.ok {
+        color: #155b3a;
+        background: #e9f6ee;
+        border-color: #c3e3cf;
+      }
+
+      .tag.warn {
+        color: #815018;
+        background: #fff5e8;
+        border-color: #f0d2a8;
+      }
+
+      .tag.risk {
+        color: #813131;
+        background: #fff0f0;
+        border-color: #efc5c5;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(120px, 1fr));
+        gap: 10px;
+      }
+
+      .step {
+        min-height: 128px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .step-number {
+        display: inline-flex;
+        width: 28px;
+        height: 28px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        color: #fff;
+        background: var(--brand);
+        font-weight: 800;
+        font-size: 13px;
+      }
+
+      .step h3 {
+        margin-top: 12px;
+      }
+
+      .step p {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 860px;
+      }
+
+      th,
+      td {
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: #31414f;
+        background: #f0f4f7;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .checklist {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .checklist li {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .box {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        border: 2px solid #8aa0b4;
+        border-radius: 4px;
+      }
+
+      .note {
+        padding: 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        background: #fff8ed;
+        color: #5d421f;
+      }
+
+      .risk-box {
+        border-color: #efc5c5;
+        background: #fff6f6;
+      }
+
+      .ok-box {
+        border-color: #c3e3cf;
+        background: #f2fbf5;
+      }
+
+      .footer {
+        margin-top: 32px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      @media (max-width: 980px) {
+        .hero,
+        .grid.two,
+        .grid.three {
+          grid-template-columns: 1fr;
+        }
+
+        .flow {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 620px) {
+        .page {
+          padding: 18px 12px 40px;
+        }
+
+        .hero-main,
+        .panel,
+        .card,
+        .brief-card {
+          padding: 18px;
+        }
+
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        .section-header {
+          align-items: start;
+          flex-direction: column;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .page {
+          max-width: none;
+          padding: 0;
+        }
+
+        .hero-main,
+        .panel,
+        .card,
+        .mini-card {
+          box-shadow: none;
+          break-inside: avoid;
+        }
+
+        .button {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero" id="top">
+        <div class="hero-main">
+          <div class="eyebrow">Business brief</div>
+          <h1>Bill splitting app without in-app payments</h1>
+          <p class="hero-copy">
+            This brief explains what the app does, what users experience, what
+            the business team needs to validate, and what payment research
+            should cover before the product considers any payment integration.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#journey">View App Journey</a>
+            <a class="button" href="#payment-research">Payment Research</a>
+            <a class="button" href="#business-actions">Business Actions</a>
+          </div>
+        </div>
+
+        <aside class="brief-card">
+          <div class="eyebrow">Current strategy</div>
+          <h2>Split first. Pay outside the app.</h2>
+          <p class="muted" style="margin-top: 12px">
+            The MVP calculates what each person owes and tracks settlement
+            status. Users complete repayment through their preferred external
+            method.
+          </p>
+          <div class="metric">
+            <strong>No money movement</strong>
+            No wallet, no card processing, no payouts, no stored bank details.
+          </div>
+        </aside>
+      </section>
+
+      <section class="section" id="overview">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Product overview</div>
+            <h2>What is going on in the app?</h2>
+          </div>
+          <p>
+            One user pays a bill first, uses the app to split the receipt, then
+            tracks whether friends have paid them back outside the app.
+          </p>
+        </div>
+
+        <div class="grid three">
+          <article class="card">
+            <h3>Core problem</h3>
+            <p class="muted" style="margin-top: 10px">
+              Group bills are annoying when people ordered different items,
+              shared some dishes, and need tax or service charge split fairly.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Core solution</h3>
+            <p class="muted" style="margin-top: 10px">
+              The app captures the receipt, turns it into selectable items,
+              lets participants choose what they bought, calculates exact
+              shares, and shows who owes the payer.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Core boundary</h3>
+            <p class="muted" style="margin-top: 10px">
+              The app does not transfer money. It only displays repayment
+              instructions and lets users mark settlements manually.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="journey">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">User journey</div>
+            <h2>The app flow in six steps</h2>
+          </div>
+          <p>
+            This is the business-level journey the team should understand before
+            discussing monetization, partnerships, or payment integrations.
+          </p>
+        </div>
+
+        <div class="flow">
+          <article class="step">
+            <span class="step-number">1</span>
+            <h3>Take photo</h3>
+            <p>User takes or uploads a receipt photo to start the split.</p>
+          </article>
+          <article class="step">
+            <span class="step-number">2</span>
+            <h3>Review receipt</h3>
+            <p>App reads items, totals, tax, and service charge for correction.</p>
+          </article>
+          <article class="step">
+            <span class="step-number">3</span>
+            <h3>Invite people</h3>
+            <p>User shares a link or QR so friends can join the bill.</p>
+          </article>
+          <article class="step">
+            <span class="step-number">4</span>
+            <h3>Select items</h3>
+            <p>Participants choose the items they bought or shared.</p>
+          </article>
+          <article class="step">
+            <span class="step-number">5</span>
+            <h3>Review split</h3>
+            <p>Payer checks claims, shared items, tax, discounts, and final amounts.</p>
+          </article>
+          <article class="step">
+            <span class="step-number">6</span>
+            <h3>Track settlement</h3>
+            <p>User shares the summary and marks people as paid after external repayment.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="scope">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">MVP scope</div>
+            <h2>What we build first</h2>
+          </div>
+          <p>
+            The first release should prove the split workflow before adding
+            complex finance features.
+          </p>
+        </div>
+
+        <div class="grid two">
+          <article class="panel ok-box">
+            <h3>In scope</h3>
+            <div class="tag-row">
+              <span class="tag ok">User accounts</span>
+              <span class="tag ok">Groups</span>
+              <span class="tag ok">Manual receipt entry</span>
+              <span class="tag ok">Receipt image upload</span>
+              <span class="tag ok">Participant item selection</span>
+              <span class="tag ok">Tax and service split</span>
+              <span class="tag ok">Shareable summary</span>
+              <span class="tag ok">Manual paid status</span>
+            </div>
+          </article>
+
+          <article class="panel risk-box">
+            <h3>Out of scope for MVP</h3>
+            <div class="tag-row">
+              <span class="tag risk">Card payments</span>
+              <span class="tag risk">Wallet balances</span>
+              <span class="tag risk">Payouts</span>
+              <span class="tag risk">Escrow</span>
+              <span class="tag risk">Bank linking</span>
+              <span class="tag risk">KYC</span>
+              <span class="tag risk">Automated payment confirmation</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="pages">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Screens</div>
+            <h2>Pages the business team should understand</h2>
+          </div>
+          <p>
+            These screens explain how value is delivered. They are also the
+            screens to use in user interviews and prototype testing.
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Page</th>
+                <th>Business purpose</th>
+                <th>What to validate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Dashboard</td>
+                <td>Shows recent bills, unpaid settlements, and main action.</td>
+                <td>Can users quickly see what needs attention?</td>
+              </tr>
+              <tr>
+                <td>Receipt Capture</td>
+                <td>Starts the workflow by taking or uploading a receipt photo.</td>
+                <td>Will users expect camera-first flow instead of form-first flow?</td>
+              </tr>
+              <tr>
+                <td>Manual Item Entry</td>
+                <td>Lets users enter receipt line items without OCR.</td>
+                <td>How many items can users tolerate entering manually?</td>
+              </tr>
+              <tr>
+                <td>Invite Participants</td>
+                <td>Lets people join the bill from a link or QR code.</td>
+                <td>Do users prefer link, QR, contacts, or guest-name entry?</td>
+              </tr>
+              <tr>
+                <td>Participant Item Selection</td>
+                <td>Lets each participant select the items they bought or shared.</td>
+                <td>Can participants claim items quickly without confusion or duplicate claims?</td>
+              </tr>
+              <tr>
+                <td>Split Summary</td>
+                <td>Shows final owed amounts and payer.</td>
+                <td>Do users trust the calculation after participants self-select items?</td>
+              </tr>
+              <tr>
+                <td>Shared Public View</td>
+                <td>Lets recipients view the split from a link.</td>
+                <td>Can recipients understand what they owe without signing in?</td>
+              </tr>
+              <tr>
+                <td>Settlement Tracking</td>
+                <td>Tracks who has paid outside the app.</td>
+                <td>What statuses and reminders are useful without feeling pushy?</td>
+              </tr>
+              <tr>
+                <td>External Payment Info</td>
+                <td>Stores optional payment instructions or QR image.</td>
+                <td>Which methods do users actually want to show to friends?</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="competitor-research">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Competitor research</div>
+            <h2>Receipt-splitting app patterns to study</h2>
+          </div>
+          <p>
+            Split Mobile is the direct reference app to study. Its public site
+            describes a receipt-first flow where the host uploads a receipt,
+            shares a secure link, guests claim their items or split evenly, and
+            settlement happens through card or supported checkout.
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>App / reference</th>
+                <th>Observed pattern</th>
+                <th>What we should learn</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Split Mobile</td>
+                <td>Host uploads or snaps a receipt, shares a guest link, guests claim items or choose even split, then settle through checkout.</td>
+                <td>Study the receipt-first flow, guest link experience, item-claiming UX, and payment scope we are intentionally excluding from MVP.</td>
+              </tr>
+              <tr>
+                <td>Splyt</td>
+                <td>Users scan a receipt, share a link or QR, and friends tap what they ordered.</td>
+                <td>Study link/QR joining, no-download participant flow, and item claiming UX.</td>
+              </tr>
+              <tr>
+                <td>SplitEven</td>
+                <td>Receipt scan extracts items, then users assign or split items and share a browser link.</td>
+                <td>Study how much detail recipients need before trusting the total.</td>
+              </tr>
+              <tr>
+                <td>splitty</td>
+                <td>Starts from snapping a receipt and tweaking who got what, including shared dishes.</td>
+                <td>Study shared-item controls and how defaults reduce effort.</td>
+              </tr>
+              <tr>
+                <td>ReceiptSplit</td>
+                <td>Only the organizer needs the app; friends receive a text breakdown.</td>
+                <td>Study whether we can avoid forcing participant sign-up in MVP.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="payment-research">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Payment research</div>
+            <h2>What the business team should research</h2>
+          </div>
+          <p>
+            The payment workstream is research-only for MVP. The goal is to
+            understand user behavior, market expectations, compliance burden,
+            and future partnership options.
+          </p>
+        </div>
+
+        <div class="note">
+          Recommendation: keep payment out of the MVP. Research payment behavior
+          now, then decide later whether to add payment links, payment QR
+          display, or real provider integration.
+        </div>
+
+        <div class="grid two" style="margin-top: 14px">
+          <article class="panel">
+            <h3>Research workstream A: User payment behavior</h3>
+            <ul class="checklist" style="margin-top: 14px">
+              <li><span class="box"></span><span>Which external methods do users already use: cash, bank transfer, DuitNow, Touch 'n Go, GrabPay, PayPal, Venmo, Zelle, or others?</span></li>
+              <li><span class="box"></span><span>Do users want payment instructions shown inside the bill summary?</span></li>
+              <li><span class="box"></span><span>Do users prefer QR images, phone numbers, usernames, or plain text instructions?</span></li>
+              <li><span class="box"></span><span>How often do users forget to pay after seeing a split?</span></li>
+              <li><span class="box"></span><span>Would reminders feel helpful or annoying?</span></li>
+            </ul>
+          </article>
+
+          <article class="panel">
+            <h3>Research workstream B: Market and competitor analysis</h3>
+            <ul class="checklist" style="margin-top: 14px">
+              <li><span class="box"></span><span>Compare Splitwise, Tab, Settle Up, Tricount, Venmo groups, and local wallet workflows.</span></li>
+              <li><span class="box"></span><span>Identify which competitors support receipt itemization, settlement status, reminders, and payment links.</span></li>
+              <li><span class="box"></span><span>Document pricing, free limits, and premium features.</span></li>
+              <li><span class="box"></span><span>Check user complaints about payment friction, receipt scanning, and group tracking.</span></li>
+              <li><span class="box"></span><span>Find gaps that can become our positioning.</span></li>
+            </ul>
+          </article>
+
+          <article class="panel">
+            <h3>Research workstream C: Provider feasibility</h3>
+            <ul class="checklist" style="margin-top: 14px">
+              <li><span class="box"></span><span>Analyze Split Mobile's payment model: guests settle by card or supported checkout, while reimbursement stays tied to the receipt.</span></li>
+              <li><span class="box"></span><span>List payment providers by region: Stripe, PayPal, Billplz, Razer Merchant Services, PayNet/DuitNow, wallet providers.</span></li>
+              <li><span class="box"></span><span>Check whether each supports payment links, QR, webhooks, refunds, and settlement reporting.</span></li>
+              <li><span class="box"></span><span>Check onboarding requirements, business account requirements, approval timelines, fees, and supported countries.</span></li>
+              <li><span class="box"></span><span>Confirm whether peer-to-peer repayment is allowed by provider terms.</span></li>
+              <li><span class="box"></span><span>Identify sandbox access requirements and technical documentation quality.</span></li>
+            </ul>
+          </article>
+
+          <article class="panel">
+            <h3>Research workstream D: Risk and compliance</h3>
+            <ul class="checklist" style="margin-top: 14px">
+              <li><span class="box"></span><span>Clarify what changes legally if the app initiates or receives payments.</span></li>
+              <li><span class="box"></span><span>Understand KYC, AML, chargebacks, disputes, fraud, and data retention obligations.</span></li>
+              <li><span class="box"></span><span>Check whether the company can avoid holding funds by using payment links only.</span></li>
+              <li><span class="box"></span><span>Ask legal/accounting how revenue, fees, refunds, and taxes would be handled.</span></li>
+              <li><span class="box"></span><span>Define a clear "we do not process payments" user disclaimer for MVP.</span></li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="payment-options">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Future payment options</div>
+            <h2>Possible directions after MVP</h2>
+          </div>
+          <p>
+            These are not MVP requirements. They are decision paths the business
+            team can evaluate after user validation.
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it means</th>
+                <th>Business complexity</th>
+                <th>Best use case</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Manual instructions</td>
+                <td>Show text like "Pay Alex by DuitNow to 012-3456789".</td>
+                <td>Low</td>
+                <td>MVP and early market validation.</td>
+              </tr>
+              <tr>
+                <td>QR image display</td>
+                <td>User uploads their external payment QR image for others to scan.</td>
+                <td>Low to medium</td>
+                <td>Markets where QR repayment is common.</td>
+              </tr>
+              <tr>
+                <td>Payment links</td>
+                <td>Generate links through a provider, but provider handles checkout.</td>
+                <td>Medium</td>
+                <td>When users want smoother repayment but the app should avoid holding funds. This is the closest future path to Split Mobile's checkout-style settlement.</td>
+              </tr>
+              <tr>
+                <td>Marketplace payments</td>
+                <td>Use providers like Stripe Connect to route funds to users.</td>
+                <td>High</td>
+                <td>Later stage product with enough volume to justify compliance work.</td>
+              </tr>
+              <tr>
+                <td>Bank or wallet integration</td>
+                <td>Integrate local rails such as DuitNow through approved providers.</td>
+                <td>High</td>
+                <td>Country-specific expansion with strong partner support.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="business-actions">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Business actions</div>
+            <h2>What the business team should do next</h2>
+          </div>
+          <p>
+            These tasks help the team reduce uncertainty before engineering
+            invests in payment-related features.
+          </p>
+        </div>
+
+        <div class="grid three">
+          <article class="mini-card">
+            <h3>1. Interview users</h3>
+            <p class="muted" style="margin-top: 8px">
+              Talk to friends, students, roommates, travelers, and office teams
+              about how they split bills today.
+            </p>
+          </article>
+          <article class="mini-card">
+            <h3>2. Test prototype</h3>
+            <p class="muted" style="margin-top: 8px">
+              Use the key screens to test if users understand selecting their
+              own items, owed amounts, and settlement tracking.
+            </p>
+          </article>
+          <article class="mini-card">
+            <h3>3. Map payment habits</h3>
+            <p class="muted" style="margin-top: 8px">
+              Identify the top external repayment methods by region and user
+              segment.
+            </p>
+          </article>
+          <article class="mini-card">
+            <h3>4. Contact providers</h3>
+            <p class="muted" style="margin-top: 8px">
+              Ask providers about payment links, QR support, fees, eligibility,
+              and whether peer repayment is allowed.
+            </p>
+          </article>
+          <article class="mini-card">
+            <h3>5. Check compliance</h3>
+            <p class="muted" style="margin-top: 8px">
+              Confirm with legal/accounting what features trigger financial
+              compliance obligations.
+            </p>
+          </article>
+          <article class="mini-card">
+            <h3>6. Decide later</h3>
+            <p class="muted" style="margin-top: 8px">
+              Only add payment integration after users prove that payment
+              friction is a major blocker.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="questions">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Research questions</div>
+            <h2>Questions to answer before payment integration</h2>
+          </div>
+        </div>
+
+        <div class="panel">
+          <ul class="checklist">
+            <li><span class="box"></span><span>What percentage of users would be satisfied with manual settlement tracking?</span></li>
+            <li><span class="box"></span><span>Which repayment methods are most common in our launch market?</span></li>
+            <li><span class="box"></span><span>Would users trust the app more or less if it tried to process payments?</span></li>
+            <li><span class="box"></span><span>Are users willing to pay fees for smoother repayment?</span></li>
+            <li><span class="box"></span><span>Can payment links solve enough of the problem without full money movement?</span></li>
+            <li><span class="box"></span><span>What provider terms restrict peer-to-peer repayment or personal use?</span></li>
+            <li><span class="box"></span><span>What is the minimum transaction volume needed to justify integration cost?</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="sources">
+        <div class="section-header">
+          <div>
+            <div class="eyebrow">Reference links</div>
+            <h2>Useful starting points for payment research</h2>
+          </div>
+        </div>
+
+        <div class="grid two">
+          <article class="card">
+            <h3>Provider documentation</h3>
+            <div class="tag-row">
+              <a class="tag" href="https://docs.stripe.com/connect">Stripe Connect</a>
+              <a class="tag" href="https://developer.paypal.com/docs/payouts/">PayPal Payouts</a>
+              <a class="tag" href="https://docs.developer.paynet.my/">PayNet Developer Portal</a>
+              <a class="tag" href="https://www.billplz.com/api/">Billplz API</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Receipt/OCR references</h3>
+            <div class="tag-row">
+              <a class="tag" href="https://www.veryfi.com/receipt-ocr-api">Veryfi Receipt OCR</a>
+              <a class="tag" href="https://cloud.google.com/document-ai">Google Document AI</a>
+              <a class="tag" href="https://aws.amazon.com/textract/">AWS Textract</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Comparable app references</h3>
+            <div class="tag-row">
+              <a class="tag" href="https://www.splitapp.co/">Split Mobile</a>
+              <a class="tag" href="https://apps.apple.com/us/app/splyt-tab-bill-splitter/id1605675055">Splyt</a>
+              <a class="tag" href="https://getspliteven.com/">SplitEven</a>
+              <a class="tag" href="https://apps.apple.com/us/app/splitty-bills-made-easy/id1499263885">splitty</a>
+              <a class="tag" href="https://apps.apple.com/us/app/receiptsplit-split-scan/id6756941573">ReceiptSplit</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p>
+          Prepared for business and product discussion. MVP recommendation:
+          build bill splitting and manual settlement tracking first; keep
+          payment integration as a separate research and future roadmap item.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
