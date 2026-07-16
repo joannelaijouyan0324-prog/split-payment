@@ -29,8 +29,8 @@ services:
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
-      NEXT_PUBLIC_SUPABASE_URL: "https://drzawixotavjlenxunzx.supabase.co"
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_yvJAAVbw1xwwJivGBmRNOg_0HtKpkCZ"
+      NEXT_PUBLIC_SUPABASE_URL: "https://uobdgswxnktktwompvrf.supabase.co"
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_vC9WmjZM19gzuwaxjYr_Kg_xa4T_Wdz"
     volumes:
       - .:/app
       - /app/node_modules

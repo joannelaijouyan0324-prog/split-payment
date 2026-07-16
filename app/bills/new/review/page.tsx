@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
-import { useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
+import { useEffect, useMemo, useState } from "react";
 
 type SplitMode = "equal" | "itemized";
 type RoundingMode = "exact" | "down" | "up";
@@ -37,6 +38,7 @@ function roundAmount(value: number, mode: RoundingMode) {
 }
 
 export default function NewBillPage() {
+  const [activeBillId, setActiveBillId] = useState("");
   const [billTitle, setBillTitle] = useState("Sushi dinner");
   const [merchant, setMerchant] = useState("Jalan Bistro");
   const [currency, setCurrency] = useState("MYR");
@@ -67,6 +69,88 @@ export default function NewBillPage() {
     { id: "item-3", name: "Pizza large", amount: 40, assignedTo: ["alex", "ben", "chloe", "daniel"] },
     { id: "item-4", name: "Mushroom soup", amount: 12, assignedTo: ["daniel"] },
   ]);
+
+  useEffect(() => {
+    const billId = new URLSearchParams(window.location.search).get("billId");
+    if (!billId) return;
+
+    async function loadBill() {
+      const { data, error } = await supabase
+        .from("bills")
+        .select(
+          `
+          id,
+          title,
+          merchant_name,
+          currency,
+          split_mode,
+          rounding_mode,
+          bill_participants(id, display_name, settlement_status, role),
+          receipt_images(file_name)
+        `,
+        )
+        .eq("id", billId)
+        .single();
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      setActiveBillId(data.id);
+      setBillTitle(data.title || "Untitled bill");
+      setMerchant(data.merchant_name || "");
+      setCurrency(data.currency || "MYR");
+      setSplitMode(data.split_mode as SplitMode);
+      setRoundingMode(data.rounding_mode as RoundingMode);
+      setReceiptName(data.receipt_images?.[0]?.file_name || "");
+
+      if (data.bill_participants?.length) {
+        const loadedParticipants = data.bill_participants.map((participant) => ({
+          id: participant.id,
+          name: participant.display_name,
+          status: participant.settlement_status as SettlementStatus,
+        }));
+        setParticipants(loadedParticipants);
+        setPaidBy(
+          data.bill_participants.find((participant) => participant.role === "payer")?.display_name ||
+            loadedParticipants[0]?.name ||
+            "",
+        );
+      }
+
+      setItems([]);
+      setMessage("Draft bill loaded from Supabase.");
+    }
+
+    loadBill();
+  }, []);
+
+  async function saveDraft() {
+    if (!activeBillId) {
+      setMessage("This prototype bill has no database draft yet.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("bills")
+      .update({
+        title: billTitle || "Untitled bill",
+        merchant_name: merchant || null,
+        currency,
+        split_mode: splitMode,
+        rounding_mode: roundingMode,
+        subtotal_minor: Math.round(itemSubtotal * 100),
+        tax_minor: Math.round(tax * 100),
+        service_charge_minor: Math.round(service * 100),
+        discount_minor: Math.round(discount * 100),
+        total_minor: Math.round(billTotal * 100),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", activeBillId);
+
+    setMessage(error ? error.message : "Draft saved to Supabase.");
+  }
 
   const itemSubtotal = useMemo(
     () => items.reduce((total, item) => total + item.amount, 0),
@@ -189,7 +273,7 @@ export default function NewBillPage() {
             <h1>{billTitle || "Untitled bill"}</h1>
           </div>
           <div className="topbar-actions">
-            <button type="button" onClick={() => setMessage("Draft saved locally in this prototype.")}>
+            <button type="button" onClick={saveDraft}>
               Save draft
             </button>
             <button type="button" className="primary" onClick={() => setMessage("Share link generated for preview.")}>

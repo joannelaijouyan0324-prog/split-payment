@@ -1,9 +1,23 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { getLocalUser } from "@/lib/local-user";
 
 export default function StartPage() {
+  const [displayName, setDisplayName] = useState("");
+
+  useEffect(() => {
+    setDisplayName(getLocalUser()?.displayName ?? "");
+  }, []);
+
   return (
     <main className="start-page">
       <section className="start-card">
+        <div className="start-user-row">
+          <span>{displayName ? `Hi, ${displayName}` : "Name holder not set"}</span>
+          <Link href="/login">{displayName ? "Change" : "Set name"}</Link>
+        </div>
         <div className="start-actions">
           <Link className="start-action primary-start" href="/bills/new">
             <span>New Bill</span>
@@ -18,3 +32,4 @@ export default function StartPage() {
     </main>
   );
 }
+

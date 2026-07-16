@@ -1,17 +1,36 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS jsplit_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   display_name text NOT NULL,
   email text UNIQUE,
+  phone text,
   default_currency char(3) NOT NULL DEFAULT 'MYR',
+  card_save_enabled boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS user_payment_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES jsplit_users(id) ON DELETE CASCADE,
+  provider text NOT NULL,
+  provider_customer_id text,
+  provider_payment_method_id text,
+  purpose text NOT NULL DEFAULT 'pay',
+  brand text,
+  last4 text,
+  exp_month integer,
+  exp_year integer,
+  is_default boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_payment_methods_purpose_check CHECK (purpose IN ('pay', 'receive', 'both'))
+);
+
 CREATE TABLE IF NOT EXISTS bills (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  owner_user_id uuid REFERENCES jsplit_users(id) ON DELETE SET NULL,
   title text NOT NULL,
   merchant_name text,
   bill_date date NOT NULL DEFAULT CURRENT_DATE,
@@ -38,7 +57,7 @@ CREATE TABLE IF NOT EXISTS bills (
 CREATE TABLE IF NOT EXISTS bill_participants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   bill_id uuid NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
-  user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  user_id uuid REFERENCES jsplit_users(id) ON DELETE SET NULL,
   display_name text NOT NULL,
   role text NOT NULL DEFAULT 'participant',
   settlement_status text NOT NULL DEFAULT 'unpaid',
@@ -46,6 +65,9 @@ CREATE TABLE IF NOT EXISTS bill_participants (
   CONSTRAINT bill_participants_role_check CHECK (role IN ('payer', 'participant')),
   CONSTRAINT bill_participants_settlement_status_check CHECK (settlement_status IN ('unpaid', 'pending', 'paid', 'waived', 'disputed'))
 );
+
+ALTER TABLE bills
+  DROP CONSTRAINT IF EXISTS bills_paid_by_participant_id_fkey;
 
 ALTER TABLE bills
   ADD CONSTRAINT bills_paid_by_participant_id_fkey
@@ -116,13 +138,14 @@ CREATE TABLE IF NOT EXISTS settlements (
 CREATE TABLE IF NOT EXISTS activity_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   bill_id uuid REFERENCES bills(id) ON DELETE CASCADE,
-  actor_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  actor_user_id uuid REFERENCES jsplit_users(id) ON DELETE SET NULL,
   action text NOT NULL,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS bills_owner_user_id_idx ON bills(owner_user_id);
+CREATE INDEX IF NOT EXISTS user_payment_methods_user_id_idx ON user_payment_methods(user_id);
 CREATE INDEX IF NOT EXISTS bills_share_token_idx ON bills(share_token);
 CREATE INDEX IF NOT EXISTS bill_participants_bill_id_idx ON bill_participants(bill_id);
 CREATE INDEX IF NOT EXISTS bill_items_bill_id_idx ON bill_items(bill_id);
