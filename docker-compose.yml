@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: j-split-postgres
+    profiles:
+      - local-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: jsplit
+      POSTGRES_USER: jsplit
+      POSTGRES_PASSWORD: jsplit_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jsplit -d jsplit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: j-split-web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_SUPABASE_URL: "https://drzawixotavjlenxunzx.supabase.co"
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_yvJAAVbw1xwwJivGBmRNOg_0HtKpkCZ"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "find .next -mindepth 1 -delete 2>/dev/null || true; npm run dev -- --hostname 0.0.0.0 --port 3000"
+
+volumes:
+  postgres_data:
