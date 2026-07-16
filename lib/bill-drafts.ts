@@ -9,11 +9,19 @@ type CreateBillDraftInput = {
   receiptFile?: File | null;
 };
 
+type CreateBillDraftResult = {
+  id: string;
+  share_token: string;
+  parseStatus?: "ocr" | "failed";
+  parseError?: string;
+  ocrText?: string;
+};
+
 function cleanFileName(fileName: string) {
   return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
 }
 
-export async function createBillDraft({ owner, source, receiptFile }: CreateBillDraftInput) {
+export async function createBillDraft({ owner, source, receiptFile }: CreateBillDraftInput): Promise<CreateBillDraftResult> {
   const title =
     source === "manual" ? "Manual bill" : receiptFile ? receiptFile.name.replace(/\.[^.]+$/, "") : "New receipt";
 
@@ -66,14 +74,46 @@ export async function createBillDraft({ owner, source, receiptFile }: CreateBill
 
     if (uploadError) throw uploadError;
 
-    const { error: receiptError } = await supabase.from("receipt_images").insert({
-      bill_id: bill.id,
-      file_name: receiptFile.name,
-      storage_path: storagePath,
-      content_type: receiptFile.type,
-    });
+    const { data: receiptRow, error: receiptError } = await supabase
+      .from("receipt_images")
+      .insert({
+        bill_id: bill.id,
+        file_name: receiptFile.name,
+        storage_path: storagePath,
+        content_type: receiptFile.type,
+      })
+      .select("id")
+      .single();
 
     if (receiptError) throw receiptError;
+
+    if (receiptFile.type.startsWith("image/")) {
+      const parseForm = new FormData();
+      parseForm.set("billId", bill.id);
+      parseForm.set("receiptImageId", receiptRow.id);
+      parseForm.set("file", receiptFile);
+
+      const parseResponse = await fetch("/api/receipts/parse", {
+        method: "POST",
+        body: parseForm,
+      });
+
+      if (!parseResponse.ok) {
+        const parsePayload = await parseResponse.json().catch(() => null);
+        return {
+          ...bill,
+          parseStatus: "failed",
+          parseError: parsePayload?.error || "Receipt uploaded, but OCR failed.",
+        };
+      }
+
+      const parsePayload = await parseResponse.json().catch(() => null);
+      return {
+        ...bill,
+        parseStatus: "ocr",
+        ocrText: parsePayload?.ocrText || "",
+      };
+    }
   }
 
   return bill;

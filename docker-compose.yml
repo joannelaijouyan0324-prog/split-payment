@@ -26,6 +26,8 @@ services:
     container_name: j-split-web
     ports:
       - "3000:3000"
+    env_file:
+      - .env.local
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"

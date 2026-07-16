@@ -41,7 +41,16 @@ export default function NewBillStartPage() {
         source,
         receiptFile: source === "upload" ? receiptFile : null,
       });
-      router.push(`/bills/new/review?billId=${bill.id}&source=${source}`);
+      if (bill.ocrText) {
+        window.localStorage.setItem(`jsplit-ocr-${bill.id}`, bill.ocrText);
+      }
+      const parseParam =
+        bill.parseStatus === "ocr"
+          ? "&scan=ocr"
+          : bill.parseStatus === "failed"
+            ? `&scan=failed&scanError=${encodeURIComponent(bill.parseError ?? "Receipt OCR failed.")}`
+            : "";
+      router.push(`/bills/new/review?billId=${bill.id}&source=${source}${parseParam}`);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not create this bill.");
     } finally {

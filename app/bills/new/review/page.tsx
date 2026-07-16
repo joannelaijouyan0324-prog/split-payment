@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase/client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type SplitMode = "equal" | "itemized";
 type RoundingMode = "exact" | "down" | "up";
@@ -22,13 +22,32 @@ type BillItem = {
   assignedTo: string[];
 };
 
-const moneyFormatter = new Intl.NumberFormat("en-MY", {
-  style: "currency",
-  currency: "MYR",
-});
+type ParsedReceiptResponse = {
+  ocrText?: string;
+  bill?: {
+    currency?: string;
+    subtotal_minor?: number;
+    tax_minor?: number;
+    service_charge_minor?: number;
+    discount_minor?: number;
+    total_minor?: number;
+  };
+  included_tax_minor?: number;
+  items?: Array<{
+    id: string;
+    name: string;
+    total_price_minor: number;
+  }>;
+  itemCount?: number;
+  provider?: string;
+  warning?: string;
+};
 
-function formatMoney(value: number) {
-  return moneyFormatter.format(value);
+function formatMoney(value: number, currency = "MYR") {
+  return new Intl.NumberFormat("en-MY", {
+    style: "currency",
+    currency,
+  }).format(value);
 }
 
 function roundAmount(value: number, mode: RoundingMode) {
@@ -47,11 +66,16 @@ function formatAmountInput(amountMinor?: number | null) {
   return value === 0 ? "" : String(value);
 }
 
+function cleanFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
+}
+
 const extensionHydrationProps = {
   suppressHydrationWarning: true,
 };
 
 export default function NewBillPage() {
+  const receiptInputRef = useRef<HTMLInputElement | null>(null);
   const [activeBillId, setActiveBillId] = useState("");
   const [billSource, setBillSource] = useState<"manual" | "scan" | "upload">("manual");
   const [billTitle, setBillTitle] = useState("");
@@ -63,11 +87,14 @@ export default function NewBillPage() {
   const [receiptName, setReceiptName] = useState("");
   const [receiptImageId, setReceiptImageId] = useState("");
   const [receiptStoragePath, setReceiptStoragePath] = useState("");
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState("");
+  const [receiptOcrText, setReceiptOcrText] = useState("");
   const [participantName, setParticipantName] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemAmount, setItemAmount] = useState("");
   const [equalSubtotalInput, setEqualSubtotalInput] = useState("");
   const [taxInput, setTaxInput] = useState("");
+  const [includedTaxMinor, setIncludedTaxMinor] = useState(0);
   const [serviceInput, setServiceInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
   const [message, setMessage] = useState("Create a receipt split from this workspace.");
@@ -82,6 +109,8 @@ export default function NewBillPage() {
     const params = new URLSearchParams(window.location.search);
     const billId = params.get("billId");
     const sourceParam = params.get("source");
+    const scanParam = params.get("scan");
+    const scanError = params.get("scanError");
     if (sourceParam === "manual" || sourceParam === "scan" || sourceParam === "upload") {
       setBillSource(sourceParam);
     }
@@ -110,7 +139,11 @@ export default function NewBillPage() {
       setServiceInput(formatAmountInput(data.service_charge_minor));
       setDiscountInput(formatAmountInput(data.discount_minor));
 
-      const [{ data: participantRows, error: participantLoadError }, { data: receiptRows }] =
+      const [
+        { data: participantRows, error: participantLoadError },
+        { data: receiptRows },
+        { data: itemRows, error: itemRowsError },
+      ] =
         await Promise.all([
           supabase
             .from("bill_participants")
@@ -123,10 +156,20 @@ export default function NewBillPage() {
             .eq("bill_id", billId)
             .order("created_at", { ascending: false })
             .limit(1),
+          supabase
+            .from("bill_items")
+            .select("id, name, total_price_minor")
+            .eq("bill_id", billId)
+            .order("sort_order", { ascending: true }),
         ]);
 
       if (participantLoadError) {
         setMessage(participantLoadError.message);
+        return;
+      }
+
+      if (itemRowsError) {
+        setMessage(itemRowsError.message);
         return;
       }
 
@@ -135,10 +178,30 @@ export default function NewBillPage() {
       setReceiptName(loadedReceiptName);
       setReceiptImageId(loadedReceipt?.id || "");
       setReceiptStoragePath(loadedReceipt?.storage_path || "");
-      if (!sourceParam && data.title === "Manual bill" && !loadedReceiptName) {
-        setBillSource("manual");
-      } else if (!sourceParam && loadedReceiptName) {
-        setBillSource("upload");
+      setReceiptPreviewUrl("");
+      setReceiptOcrText("");
+      setIncludedTaxMinor(0);
+      if (loadedReceipt?.storage_path) {
+        const { data: signedReceipt } = await supabase.storage
+          .from("receipts")
+          .createSignedUrl(loadedReceipt.storage_path, 60 * 60);
+        setReceiptPreviewUrl(signedReceipt?.signedUrl || "");
+      }
+      if (loadedReceipt?.id) {
+        const cachedOcrText = window.localStorage.getItem(`jsplit-ocr-${billId}`) || "";
+        if (cachedOcrText) setReceiptOcrText(cachedOcrText);
+
+        const { data: receiptOcrRow } = await supabase
+          .from("receipt_images")
+          .select("ocr_text")
+          .eq("id", loadedReceipt.id)
+          .maybeSingle();
+        if (receiptOcrRow?.ocr_text) {
+          setReceiptOcrText(receiptOcrRow.ocr_text);
+        }
+      }
+      if (!sourceParam) {
+        setBillSource(data.title === "Manual bill" ? "manual" : "upload");
       }
 
       if (participantRows?.length) {
@@ -155,8 +218,22 @@ export default function NewBillPage() {
         );
       }
 
-      setItems([]);
-      setMessage("Draft bill loaded from Supabase.");
+      setItems(
+        (itemRows ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          amount: item.total_price_minor / 100,
+          assignedTo: [],
+        })),
+      );
+
+      if (scanParam === "ocr") {
+        setMessage("Receipt OCR finished. Review the detected totals and items before sharing.");
+      } else if (scanParam === "failed") {
+        setMessage(scanError || "Receipt uploaded, but OCR failed. Enter items manually.");
+      } else {
+        setMessage("Draft bill loaded from Supabase.");
+      }
     }
 
     loadBill();
@@ -242,6 +319,7 @@ export default function NewBillPage() {
   const roundingDifference = roundedTotal - billTotal;
   const unassignedItems = items.filter((item) => item.assignedTo.length === 0);
   const payableResults = splitResults.filter((result) => result.id !== payerId);
+  const displayMoney = (value: number) => formatMoney(value, currency);
 
   function addParticipant() {
     const cleanName = participantName.trim();
@@ -312,37 +390,165 @@ export default function NewBillPage() {
     setMessage(`${participant.name} removed from this bill.`);
   }
 
-  async function removeReceipt() {
-    const removedName = receiptName;
-    setReceiptName("");
-
-    if (receiptStoragePath) {
+  async function deleteStoredReceipt(storagePath: string, imageId: string) {
+    if (storagePath) {
       const { error: storageError } = await supabase.storage
         .from("receipts")
-        .remove([receiptStoragePath]);
+        .remove([storagePath]);
 
-      if (storageError) {
-        setReceiptName(removedName);
-        setMessage(storageError.message);
-        return;
-      }
+      if (storageError) throw storageError;
     }
 
-    if (receiptImageId) {
+    if (imageId) {
       const { error: receiptError } = await supabase
         .from("receipt_images")
         .delete()
-        .eq("id", receiptImageId);
+        .eq("id", imageId);
 
-      if (receiptError) {
-        setReceiptName(removedName);
-        setMessage(receiptError.message);
+      if (receiptError) throw receiptError;
+    }
+  }
+
+  async function uploadReceipt(file: File) {
+    if (!activeBillId) {
+      setMessage("This draft is still loading. Try again in a moment.");
+      return;
+    }
+
+    const previous = {
+      name: receiptName,
+      imageId: receiptImageId,
+      storagePath: receiptStoragePath,
+      previewUrl: receiptPreviewUrl,
+      ocrText: receiptOcrText,
+    };
+    const previewUrl = URL.createObjectURL(file);
+    const storagePath = `${activeBillId}/${Date.now()}-${cleanFileName(file.name)}`;
+
+    setReceiptName(file.name);
+    setReceiptImageId("");
+    setReceiptStoragePath("");
+    setReceiptPreviewUrl(previewUrl);
+    setReceiptOcrText("");
+    setMessage(`Uploading ${file.name}...`);
+
+    try {
+      if (previous.storagePath || previous.imageId) {
+        await deleteStoredReceipt(previous.storagePath, previous.imageId);
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from("receipts")
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType: file.type || undefined,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: receiptRow, error: receiptError } = await supabase
+        .from("receipt_images")
+        .insert({
+          bill_id: activeBillId,
+          file_name: file.name,
+          storage_path: storagePath,
+          content_type: file.type,
+        })
+        .select("id, storage_path")
+        .single();
+
+      if (receiptError) throw receiptError;
+
+      setReceiptImageId(receiptRow.id);
+      setReceiptStoragePath(receiptRow.storage_path);
+      if (!file.type.startsWith("image/")) {
+        setMessage(`${file.name} uploaded. Receipt scanning currently supports image files only.`);
         return;
       }
+
+      setMessage(`${file.name} uploaded. Scanning receipt...`);
+      const parseForm = new FormData();
+      parseForm.set("billId", activeBillId);
+      parseForm.set("receiptImageId", receiptRow.id);
+      parseForm.set("file", file);
+
+      const parseResponse = await fetch("/api/receipts/parse", {
+        method: "POST",
+        body: parseForm,
+      });
+
+      const parsePayload = await parseResponse.json().catch(() => null);
+      if (!parseResponse.ok) {
+        setMessage(parsePayload?.error || `${file.name} uploaded, but scanning failed.`);
+        return;
+      }
+
+      const parsed = parsePayload as ParsedReceiptResponse;
+      setReceiptOcrText(parsed.ocrText || "");
+      window.localStorage.setItem(`jsplit-ocr-${activeBillId}`, parsed.ocrText || "");
+      setSplitMode("itemized");
+      if (parsed.bill) {
+        setCurrency(parsed.bill.currency || currency);
+        setEqualSubtotalInput(formatAmountInput(parsed.bill.subtotal_minor));
+        setTaxInput(formatAmountInput(parsed.bill.tax_minor));
+        setServiceInput(formatAmountInput(parsed.bill.service_charge_minor));
+        setDiscountInput(formatAmountInput(parsed.bill.discount_minor));
+      }
+      setIncludedTaxMinor(parsed.included_tax_minor ?? 0);
+      setItems(
+        (parsed.items ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          amount: item.total_price_minor / 100,
+          assignedTo: [],
+        })),
+      );
+      setMessage(
+        parsed.provider === "tesseract+openai"
+          ? `OpenAI parsed the OCR text. ${parsed.itemCount ?? 0} item(s) found. Please review before sharing.`
+          : `Receipt OCR finished with local parsing. ${parsed.itemCount ?? 0} item(s) found. ${parsed.warning ? parsed.warning : "Please review before sharing."}`,
+      );
+    } catch (error) {
+      setReceiptName(previous.name);
+      setReceiptImageId(previous.imageId);
+      setReceiptStoragePath(previous.storagePath);
+      setReceiptPreviewUrl(previous.previewUrl);
+      setReceiptOcrText(previous.ocrText);
+      setMessage(error instanceof Error ? error.message : "Receipt upload failed.");
+    } finally {
+      if (receiptInputRef.current) {
+        receiptInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function removeReceipt() {
+    const removedName = receiptName;
+    const removedPreviewUrl = receiptPreviewUrl;
+    const removedOcrText = receiptOcrText;
+    setReceiptName("");
+    setReceiptPreviewUrl("");
+    setReceiptOcrText("");
+
+    try {
+      await deleteStoredReceipt(receiptStoragePath, receiptImageId);
+    } catch (error) {
+      setReceiptName(removedName);
+      setReceiptPreviewUrl(removedPreviewUrl);
+      setReceiptOcrText(removedOcrText);
+      setMessage(error instanceof Error ? error.message : "Receipt removal failed.");
+      return;
     }
 
     setReceiptImageId("");
     setReceiptStoragePath("");
+    if (receiptInputRef.current) {
+      receiptInputRef.current.value = "";
+    }
+    if (activeBillId) {
+      window.localStorage.removeItem(`jsplit-ocr-${activeBillId}`);
+    }
     setMessage(removedName ? `${removedName} removed.` : "Receipt removed.");
   }
 
@@ -396,14 +602,16 @@ export default function NewBillPage() {
                   <label className="file-control">
                     Upload receipt
                     <input
+                      ref={receiptInputRef}
                       type="file"
                       accept="image/*"
                       onChange={(event) => {
-                        const file = event.target.files?.[0]?.name ?? "";
-                        setReceiptName(file);
-                        setReceiptImageId("");
-                        setReceiptStoragePath("");
-                        setMessage(file ? `Receipt uploaded: ${file}` : "Receipt upload cancelled.");
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          uploadReceipt(file);
+                        } else {
+                          setMessage("Receipt upload cancelled.");
+                        }
                       }}
                     />
                   </label>
@@ -413,8 +621,13 @@ export default function NewBillPage() {
               <div className={isManualBill ? "bill-layout manual-bill-layout" : "bill-layout"}>
                 {!isManualBill ? (
                   <div className="receipt-placeholder">
+                    {receiptPreviewUrl ? (
+                      <img src={receiptPreviewUrl} alt={receiptName || "Uploaded receipt"} />
+                    ) : null}
                     <strong>{receiptName || "Receipt image placeholder"}</strong>
-                    <span>Place the uploaded receipt photo here for review and OCR later.</span>
+                    {!receiptPreviewUrl ? (
+                      <span>Place the uploaded receipt photo here for review and OCR later.</span>
+                    ) : null}
                     {receiptName ? (
                       <button
                         type="button"
@@ -443,6 +656,7 @@ export default function NewBillPage() {
                       <option>MYR</option>
                       <option>USD</option>
                       <option>SGD</option>
+                      <option>CHF</option>
                       <option>EUR</option>
                       <option>GBP</option>
                     </select>
@@ -458,6 +672,18 @@ export default function NewBillPage() {
                 </div>
               </div>
             </section>
+
+            {!isManualBill && receiptOcrText ? (
+              <section className="panel ocr-panel">
+                <div className="panel-heading">
+                  <div>
+                    <span className="eyebrow">OCR Text</span>
+                    <h2>Extracted receipt text</h2>
+                  </div>
+                </div>
+                <pre>{receiptOcrText}</pre>
+              </section>
+            ) : null}
 
             <section className="panel">
               <div className="panel-heading">
@@ -586,7 +812,7 @@ export default function NewBillPage() {
                       <article className="item-row" key={item.id}>
                         <div className="item-main">
                           <strong>{item.name}</strong>
-                          <span>{formatMoney(item.amount)}</span>
+                          <span>{displayMoney(item.amount)}</span>
                         </div>
                         <div className="assignment-grid">
                           {participants.map((participant) => (
@@ -620,13 +846,13 @@ export default function NewBillPage() {
 
               <div className="money-card">
                 <span>{merchant}</span>
-                <strong>{formatMoney(billTotal)}</strong>
+                <strong>{displayMoney(billTotal)}</strong>
               </div>
 
               {splitMode === "itemized" ? (
                 <div className="adjustments">
                   <label>
-                    Tax
+                    Additional tax
                     <input inputMode="decimal" placeholder="0.00" value={taxInput} onChange={(event) => setTaxInput(event.target.value)} {...extensionHydrationProps} />
                   </label>
                   <label>
@@ -638,6 +864,12 @@ export default function NewBillPage() {
                     <input inputMode="decimal" placeholder="0.00" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} {...extensionHydrationProps} />
                   </label>
                 </div>
+              ) : null}
+
+              {includedTaxMinor > 0 && splitMode === "itemized" ? (
+                <p className="included-tax-note">
+                  Included tax shown on receipt: {displayMoney(includedTaxMinor / 100)}. It is already inside the item prices.
+                </p>
               ) : null}
 
               <div className="rounding-box">
@@ -653,7 +885,7 @@ export default function NewBillPage() {
                     Up
                   </button>
                 </div>
-                <small>Difference: {formatMoney(roundingDifference)}</small>
+                <small>Difference: {displayMoney(roundingDifference)}</small>
               </div>
 
               {unassignedItems.length > 0 && splitMode === "itemized" ? (
@@ -672,11 +904,11 @@ export default function NewBillPage() {
                       <strong>{result.name}</strong>
                       <span>
                         {splitMode === "equal"
-                          ? `Share ${formatMoney(result.rounded)}`
-                          : `Items ${formatMoney(result.itemShare)} - Tax ${formatMoney(result.taxShare)} - Service ${formatMoney(result.serviceShare)}`}
+                          ? `Share ${displayMoney(result.rounded)}`
+                          : `Items ${displayMoney(result.itemShare)} - Additional tax ${displayMoney(result.taxShare)} - Service ${displayMoney(result.serviceShare)}`}
                       </span>
                     </div>
-                    <b>{formatMoney(result.rounded)}</b>
+                    <b>{displayMoney(result.rounded)}</b>
                     <select
                       value={result.status}
                       onChange={(event) => updateStatus(result.id, event.target.value as SettlementStatus)}
