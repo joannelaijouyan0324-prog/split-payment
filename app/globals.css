@@ -196,7 +196,6 @@ a[aria-disabled="true"] {
 }
 
 button,
-a,
 .file-control,
 .capture-action,
 .start-action,
@@ -215,7 +214,6 @@ a,
 }
 
 button:hover,
-a:hover,
 .file-control:hover,
 .capture-action:hover,
 .start-action:hover,
@@ -230,7 +228,6 @@ a:hover,
 }
 
 button:active,
-a:active,
 .file-control:active,
 .capture-action:active,
 .start-action:active,
@@ -516,6 +513,10 @@ button.primary {
   gap: 18px;
 }
 
+.manual-bill-layout {
+  grid-template-columns: 1fr;
+}
+
 .receipt-placeholder {
   display: grid;
   min-height: 220px;
@@ -536,6 +537,10 @@ button.primary {
   line-height: 1.45;
 }
 
+.receipt-remove {
+  margin-top: 12px;
+}
+
 .form-grid,
 .adjustments {
   display: grid;
@@ -546,6 +551,13 @@ button.primary {
 .inline-form {
   grid-template-columns: minmax(0, 1fr) auto;
   margin-bottom: 18px;
+}
+
+.single-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 #items .inline-form {
@@ -564,6 +576,18 @@ button.primary {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
+}
+
+.people-list article > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.remove-chip {
+  min-height: auto;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .avatar {
@@ -699,6 +723,14 @@ button.primary {
   color: var(--primary-deep);
 }
 
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -749,12 +781,82 @@ button.primary {
   gap: 10px;
 }
 
+.history-row-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
 .history-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 110px;
+  grid-template-columns: minmax(0, 1fr) auto 88px;
   gap: 12px;
   align-items: center;
   padding: 13px;
+}
+
+.history-amount {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.history-delete {
+  justify-self: start;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(17, 17, 17, 0.42);
+  padding: 20px;
+}
+
+.confirm-modal {
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 22px;
+  box-shadow: 0 24px 70px rgba(17, 17, 17, 0.26);
+}
+
+.confirm-modal h2 {
+  margin: 0 0 10px;
+  font-size: 26px;
+}
+
+.confirm-modal p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.cancel-button,
+.danger-button {
+  min-width: 96px;
+  color: white;
+}
+
+.cancel-button {
+  border-color: #4b5563;
+  background: #4b5563;
+}
+
+.danger-button {
+  border-color: #b42318;
+  background: #b42318;
 }
 
 .status-pill {
@@ -814,6 +916,7 @@ button.primary {
   display: grid;
   min-height: 112px;
   align-content: center;
+  justify-items: center;
   gap: 8px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -821,6 +924,7 @@ button.primary {
   background: white;
   color: var(--primary-deep);
   padding: 20px;
+  text-align: center;
   text-decoration: none;
   cursor: pointer;
   box-shadow: 0 14px 34px rgba(13, 23, 48, 0.06);
@@ -893,6 +997,46 @@ button.primary {
 .start-user-row a {
   color: var(--primary);
   font-weight: 800;
+}
+
+.text-link {
+  position: relative;
+  display: inline-block;
+  color: var(--primary);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-decoration: none;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.text-link::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  content: "";
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 160ms ease;
+}
+
+.text-link:hover,
+.text-link:focus-visible {
+  opacity: 0.72;
+}
+
+.text-link:hover::after,
+.text-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.text-link.remove-chip {
+  color: #b42318;
 }
 
 .start-brand {
@@ -1092,6 +1236,7 @@ button.primary {
   #items .inline-form,
   .inline-form,
   .history-row,
+  .history-row-shell,
   .settings-grid,
   .results-list article {
     grid-template-columns: 1fr;

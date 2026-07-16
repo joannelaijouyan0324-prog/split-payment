@@ -32,63 +32,65 @@ function formatMoney(value: number) {
 }
 
 function roundAmount(value: number, mode: RoundingMode) {
-  if (mode === "down") return Math.floor(value);
-  if (mode === "up") return Math.ceil(value);
+  if (mode === "down") return Math.floor(value * 100) / 100;
+  if (mode === "up") return Math.ceil(value * 100) / 100;
   return Math.round(value * 100) / 100;
 }
 
+function parseAmount(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatAmountInput(amountMinor?: number | null) {
+  const value = (amountMinor ?? 0) / 100;
+  return value === 0 ? "" : String(value);
+}
+
+const extensionHydrationProps = {
+  suppressHydrationWarning: true,
+};
+
 export default function NewBillPage() {
   const [activeBillId, setActiveBillId] = useState("");
-  const [billTitle, setBillTitle] = useState("Sushi dinner");
-  const [merchant, setMerchant] = useState("Jalan Bistro");
+  const [billSource, setBillSource] = useState<"manual" | "scan" | "upload">("manual");
+  const [billTitle, setBillTitle] = useState("");
+  const [merchant, setMerchant] = useState("");
   const [currency, setCurrency] = useState("MYR");
-  const [paidBy, setPaidBy] = useState("Alex");
+  const [paidBy, setPaidBy] = useState("");
   const [splitMode, setSplitMode] = useState<SplitMode>("itemized");
   const [roundingMode, setRoundingMode] = useState<RoundingMode>("exact");
   const [receiptName, setReceiptName] = useState("");
+  const [receiptImageId, setReceiptImageId] = useState("");
+  const [receiptStoragePath, setReceiptStoragePath] = useState("");
   const [participantName, setParticipantName] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemAmount, setItemAmount] = useState("");
-  const [tax, setTax] = useState(8.4);
-  const [service, setService] = useState(12.8);
-  const [discount, setDiscount] = useState(0);
+  const [equalSubtotalInput, setEqualSubtotalInput] = useState("");
+  const [taxInput, setTaxInput] = useState("");
+  const [serviceInput, setServiceInput] = useState("");
+  const [discountInput, setDiscountInput] = useState("");
   const [message, setMessage] = useState("Create a receipt split from this workspace.");
   const [participantError, setParticipantError] = useState("");
   const [itemError, setItemError] = useState("");
 
-  const [participants, setParticipants] = useState<Participant[]>([
-    { id: "alex", name: "Alex", status: "paid" },
-    { id: "ben", name: "Ben", status: "pending" },
-    { id: "chloe", name: "Chloe", status: "unpaid" },
-    { id: "daniel", name: "Daniel", status: "unpaid" },
-  ]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
 
-  const [items, setItems] = useState<BillItem[]>([
-    { id: "item-1", name: "Chicken chop", amount: 18.9, assignedTo: ["ben", "chloe"] },
-    { id: "item-2", name: "Iced lemon tea", amount: 4.5, assignedTo: ["alex"] },
-    { id: "item-3", name: "Pizza large", amount: 40, assignedTo: ["alex", "ben", "chloe", "daniel"] },
-    { id: "item-4", name: "Mushroom soup", amount: 12, assignedTo: ["daniel"] },
-  ]);
+  const [items, setItems] = useState<BillItem[]>([]);
 
   useEffect(() => {
-    const billId = new URLSearchParams(window.location.search).get("billId");
+    const params = new URLSearchParams(window.location.search);
+    const billId = params.get("billId");
+    const sourceParam = params.get("source");
+    if (sourceParam === "manual" || sourceParam === "scan" || sourceParam === "upload") {
+      setBillSource(sourceParam);
+    }
     if (!billId) return;
 
     async function loadBill() {
       const { data, error } = await supabase
         .from("bills")
-        .select(
-          `
-          id,
-          title,
-          merchant_name,
-          currency,
-          split_mode,
-          rounding_mode,
-          bill_participants(id, display_name, settlement_status, role),
-          receipt_images(file_name)
-        `,
-        )
+        .select("id, title, merchant_name, currency, split_mode, rounding_mode, subtotal_minor, tax_minor, service_charge_minor, discount_minor")
         .eq("id", billId)
         .single();
 
@@ -103,17 +105,51 @@ export default function NewBillPage() {
       setCurrency(data.currency || "MYR");
       setSplitMode(data.split_mode as SplitMode);
       setRoundingMode(data.rounding_mode as RoundingMode);
-      setReceiptName(data.receipt_images?.[0]?.file_name || "");
+      setEqualSubtotalInput(formatAmountInput(data.subtotal_minor));
+      setTaxInput(formatAmountInput(data.tax_minor));
+      setServiceInput(formatAmountInput(data.service_charge_minor));
+      setDiscountInput(formatAmountInput(data.discount_minor));
 
-      if (data.bill_participants?.length) {
-        const loadedParticipants = data.bill_participants.map((participant) => ({
+      const [{ data: participantRows, error: participantLoadError }, { data: receiptRows }] =
+        await Promise.all([
+          supabase
+            .from("bill_participants")
+            .select("id, display_name, settlement_status, role")
+            .eq("bill_id", billId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("receipt_images")
+            .select("id, file_name, storage_path")
+            .eq("bill_id", billId)
+            .order("created_at", { ascending: false })
+            .limit(1),
+        ]);
+
+      if (participantLoadError) {
+        setMessage(participantLoadError.message);
+        return;
+      }
+
+      const loadedReceipt = receiptRows?.[0];
+      const loadedReceiptName = loadedReceipt?.file_name || "";
+      setReceiptName(loadedReceiptName);
+      setReceiptImageId(loadedReceipt?.id || "");
+      setReceiptStoragePath(loadedReceipt?.storage_path || "");
+      if (!sourceParam && data.title === "Manual bill" && !loadedReceiptName) {
+        setBillSource("manual");
+      } else if (!sourceParam && loadedReceiptName) {
+        setBillSource("upload");
+      }
+
+      if (participantRows?.length) {
+        const loadedParticipants = participantRows.map((participant) => ({
           id: participant.id,
           name: participant.display_name,
           status: participant.settlement_status as SettlementStatus,
         }));
         setParticipants(loadedParticipants);
         setPaidBy(
-          data.bill_participants.find((participant) => participant.role === "payer")?.display_name ||
+          participantRows.find((participant) => participant.role === "payer")?.display_name ||
             loadedParticipants[0]?.name ||
             "",
         );
@@ -141,9 +177,9 @@ export default function NewBillPage() {
         split_mode: splitMode,
         rounding_mode: roundingMode,
         subtotal_minor: Math.round(itemSubtotal * 100),
-        tax_minor: Math.round(tax * 100),
-        service_charge_minor: Math.round(service * 100),
-        discount_minor: Math.round(discount * 100),
+        tax_minor: splitMode === "equal" ? 0 : Math.round(tax * 100),
+        service_charge_minor: splitMode === "equal" ? 0 : Math.round(service * 100),
+        discount_minor: splitMode === "equal" ? 0 : Math.round(discount * 100),
         total_minor: Math.round(billTotal * 100),
         updated_at: new Date().toISOString(),
       })
@@ -152,19 +188,29 @@ export default function NewBillPage() {
     setMessage(error ? error.message : "Draft saved to Supabase.");
   }
 
-  const itemSubtotal = useMemo(
+  const tax = parseAmount(taxInput);
+  const service = parseAmount(serviceInput);
+  const discount = parseAmount(discountInput);
+
+  const itemizedSubtotal = useMemo(
     () => items.reduce((total, item) => total + item.amount, 0),
     [items],
   );
 
-  const billTotal = itemSubtotal + tax + service - discount;
+  const isManualBill = billSource === "manual";
+  const equalTotal = parseAmount(equalSubtotalInput);
+  const itemSubtotal = splitMode === "equal" ? equalTotal : itemizedSubtotal;
+
+  const billTotal = splitMode === "equal" ? equalTotal : itemSubtotal + tax + service - discount;
+  const payerId = participants.find((participant) => participant.name === paidBy)?.id ?? "";
 
   const splitResults = useMemo(() => {
     return participants.map((participant) => {
+      const participantCount = participants.length;
       const itemShare =
         splitMode === "equal"
-          ? participants.length > 0
-            ? itemSubtotal / participants.length
+          ? participantCount > 0
+            ? billTotal / participantCount
             : 0
           : items.reduce((total, item) => {
               if (!item.assignedTo.includes(participant.id) || item.assignedTo.length === 0) {
@@ -174,9 +220,9 @@ export default function NewBillPage() {
             }, 0);
 
       const ratio = itemSubtotal > 0 ? itemShare / itemSubtotal : 0;
-      const taxShare = tax * ratio;
-      const serviceShare = service * ratio;
-      const discountShare = discount * ratio;
+      const taxShare = splitMode === "equal" ? 0 : tax * ratio;
+      const serviceShare = splitMode === "equal" ? 0 : service * ratio;
+      const discountShare = splitMode === "equal" ? 0 : discount * ratio;
       const exact = itemShare + taxShare + serviceShare - discountShare;
       const rounded = roundAmount(exact, roundingMode);
 
@@ -190,11 +236,12 @@ export default function NewBillPage() {
         rounded,
       };
     });
-  }, [discount, itemSubtotal, items, participants, roundingMode, service, splitMode, tax]);
+  }, [billTotal, discount, itemSubtotal, items, participants, roundingMode, service, splitMode, tax]);
 
   const roundedTotal = splitResults.reduce((total, result) => total + result.rounded, 0);
   const roundingDifference = roundedTotal - billTotal;
   const unassignedItems = items.filter((item) => item.assignedTo.length === 0);
+  const payableResults = splitResults.filter((result) => result.id !== payerId);
 
   function addParticipant() {
     const cleanName = participantName.trim();
@@ -251,6 +298,54 @@ export default function NewBillPage() {
     );
   }
 
+  function removeParticipant(participantId: string) {
+    const participant = participants.find((current) => current.id === participantId);
+    if (!participant || participant.id === payerId) return;
+
+    setParticipants((current) => current.filter((item) => item.id !== participantId));
+    setItems((current) =>
+      current.map((item) => ({
+        ...item,
+        assignedTo: item.assignedTo.filter((id) => id !== participantId),
+      })),
+    );
+    setMessage(`${participant.name} removed from this bill.`);
+  }
+
+  async function removeReceipt() {
+    const removedName = receiptName;
+    setReceiptName("");
+
+    if (receiptStoragePath) {
+      const { error: storageError } = await supabase.storage
+        .from("receipts")
+        .remove([receiptStoragePath]);
+
+      if (storageError) {
+        setReceiptName(removedName);
+        setMessage(storageError.message);
+        return;
+      }
+    }
+
+    if (receiptImageId) {
+      const { error: receiptError } = await supabase
+        .from("receipt_images")
+        .delete()
+        .eq("id", receiptImageId);
+
+      if (receiptError) {
+        setReceiptName(removedName);
+        setMessage(receiptError.message);
+        return;
+      }
+    }
+
+    setReceiptImageId("");
+    setReceiptStoragePath("");
+    setMessage(removedName ? `${removedName} removed.` : "Receipt removed.");
+  }
+
   function updateStatus(participantId: string, status: SettlementStatus) {
     setParticipants((current) =>
       current.map((participant) =>
@@ -273,10 +368,15 @@ export default function NewBillPage() {
             <h1>{billTitle || "Untitled bill"}</h1>
           </div>
           <div className="topbar-actions">
-            <button type="button" onClick={saveDraft}>
+            <button type="button" onClick={saveDraft} {...extensionHydrationProps}>
               Save draft
             </button>
-            <button type="button" className="primary" onClick={() => setMessage("Share link generated for preview.")}>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setMessage("Share link generated for preview.")}
+              {...extensionHydrationProps}
+            >
               Share link
             </button>
           </div>
@@ -290,40 +390,56 @@ export default function NewBillPage() {
               <div className="panel-heading">
                 <div>
                   <span className="eyebrow">Bill Setup</span>
-                  <h2>Receipt and bill details</h2>
+                  <h2>{isManualBill ? "Bill details" : "Receipt and bill details"}</h2>
                 </div>
-                <label className="file-control">
-                  Upload receipt
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]?.name ?? "";
-                      setReceiptName(file);
-                      setMessage(file ? `Receipt uploaded: ${file}` : "Receipt upload cancelled.");
-                    }}
-                  />
-                </label>
+                {!isManualBill ? (
+                  <label className="file-control">
+                    Upload receipt
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]?.name ?? "";
+                        setReceiptName(file);
+                        setReceiptImageId("");
+                        setReceiptStoragePath("");
+                        setMessage(file ? `Receipt uploaded: ${file}` : "Receipt upload cancelled.");
+                      }}
+                    />
+                  </label>
+                ) : null}
               </div>
 
-              <div className="bill-layout">
-                <div className="receipt-placeholder">
-                  <strong>{receiptName || "Receipt image placeholder"}</strong>
-                  <span>Place the uploaded receipt photo here for review and OCR later.</span>
-                </div>
+              <div className={isManualBill ? "bill-layout manual-bill-layout" : "bill-layout"}>
+                {!isManualBill ? (
+                  <div className="receipt-placeholder">
+                    <strong>{receiptName || "Receipt image placeholder"}</strong>
+                    <span>Place the uploaded receipt photo here for review and OCR later.</span>
+                    {receiptName ? (
+                      <button
+                        type="button"
+                        className="text-link remove-chip receipt-remove"
+                        onClick={removeReceipt}
+                        {...extensionHydrationProps}
+                      >
+                        Remove receipt
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="form-grid">
                   <label>
                     Bill title
-                    <input value={billTitle} onChange={(event) => setBillTitle(event.target.value)} />
+                    <input value={billTitle} onChange={(event) => setBillTitle(event.target.value)} {...extensionHydrationProps} />
                   </label>
                   <label>
                     Merchant
-                    <input value={merchant} onChange={(event) => setMerchant(event.target.value)} />
+                    <input value={merchant} onChange={(event) => setMerchant(event.target.value)} {...extensionHydrationProps} />
                   </label>
                   <label>
                     Currency
-                    <select value={currency} onChange={(event) => setCurrency(event.target.value)}>
+                    <select value={currency} onChange={(event) => setCurrency(event.target.value)} {...extensionHydrationProps}>
                       <option>MYR</option>
                       <option>USD</option>
                       <option>SGD</option>
@@ -333,7 +449,7 @@ export default function NewBillPage() {
                   </label>
                   <label>
                     Paid by
-                    <select value={paidBy} onChange={(event) => setPaidBy(event.target.value)}>
+                    <select value={paidBy} onChange={(event) => setPaidBy(event.target.value)} {...extensionHydrationProps}>
                       {participants.map((participant) => (
                         <option key={participant.id}>{participant.name}</option>
                       ))}
@@ -359,8 +475,15 @@ export default function NewBillPage() {
                     setParticipantName(event.target.value);
                     if (participantError) setParticipantError("");
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addParticipant();
+                    }
+                  }}
+                  {...extensionHydrationProps}
                 />
-                <button type="button" onClick={addParticipant}>
+                <button type="button" onClick={addParticipant} {...extensionHydrationProps}>
                   Add
                 </button>
               </div>
@@ -373,6 +496,17 @@ export default function NewBillPage() {
                       <strong>{participant.name}</strong>
                       <span>{participant.status}</span>
                     </div>
+                    {participant.id !== payerId ? (
+                      <button
+                        type="button"
+                        className="text-link remove-chip"
+                        aria-label={`Remove ${participant.name}`}
+                        onClick={() => removeParticipant(participant.id)}
+                        {...extensionHydrationProps}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
                   </article>
                 ))}
               </div>
@@ -382,13 +516,14 @@ export default function NewBillPage() {
               <div className="panel-heading">
                 <div>
                   <span className="eyebrow">Items</span>
-                  <h2>Receipt items</h2>
+                  <h2>{splitMode === "equal" ? "Equal split total" : isManualBill ? "Manual items" : "Receipt items"}</h2>
                 </div>
                 <div className="segmented">
                   <button
                     type="button"
                     className={splitMode === "equal" ? "active" : ""}
                     onClick={() => setSplitMode("equal")}
+                    {...extensionHydrationProps}
                   >
                     Equal
                   </button>
@@ -396,63 +531,81 @@ export default function NewBillPage() {
                     type="button"
                     className={splitMode === "itemized" ? "active" : ""}
                     onClick={() => setSplitMode("itemized")}
+                    {...extensionHydrationProps}
                   >
                     Itemized
                   </button>
                 </div>
               </div>
 
-              <div className="inline-form">
-                <input
-                  placeholder="Item name"
-                  value={itemName}
-                  aria-invalid={itemError ? "true" : "false"}
-                  onChange={(event) => {
-                    setItemName(event.target.value);
-                    if (itemError) setItemError("");
-                  }}
-                />
-                <input
-                  placeholder="Amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={itemAmount}
-                  aria-invalid={itemError ? "true" : "false"}
-                  onChange={(event) => {
-                    setItemAmount(event.target.value);
-                    if (itemError) setItemError("");
-                  }}
-                />
-                <button type="button" onClick={addItem}>
-                  Add item
-                </button>
-              </div>
-              {itemError ? <p className="field-error">{itemError}</p> : null}
+              {splitMode === "equal" ? (
+                <label className="single-field">
+                  Total amount
+                  <input
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={equalSubtotalInput}
+                    onChange={(event) => setEqualSubtotalInput(event.target.value)}
+                    {...extensionHydrationProps}
+                  />
+                </label>
+              ) : (
+                <>
+                  <div className="inline-form">
+                    <input
+                      placeholder="Item name"
+                      value={itemName}
+                      aria-invalid={itemError ? "true" : "false"}
+                      onChange={(event) => {
+                        setItemName(event.target.value);
+                        if (itemError) setItemError("");
+                      }}
+                      {...extensionHydrationProps}
+                    />
+                    <input
+                      placeholder="Amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={itemAmount}
+                      aria-invalid={itemError ? "true" : "false"}
+                      onChange={(event) => {
+                        setItemAmount(event.target.value);
+                        if (itemError) setItemError("");
+                      }}
+                      {...extensionHydrationProps}
+                    />
+                    <button type="button" onClick={addItem} {...extensionHydrationProps}>
+                      Add item
+                    </button>
+                  </div>
+                  {itemError ? <p className="field-error">{itemError}</p> : null}
 
-              <div className="item-list">
-                {items.map((item) => (
-                  <article className="item-row" key={item.id}>
-                    <div className="item-main">
-                      <strong>{item.name}</strong>
-                      <span>{formatMoney(item.amount)}</span>
-                    </div>
-                    <div className="assignment-grid">
-                      {participants.map((participant) => (
-                        <label key={participant.id} className="assignment-chip">
-                          <input
-                            type="checkbox"
-                            checked={item.assignedTo.includes(participant.id)}
-                            disabled={splitMode === "equal"}
-                            onChange={() => toggleAssignment(item.id, participant.id)}
-                          />
-                          {participant.name}
-                        </label>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
+                  <div className="item-list">
+                    {items.map((item) => (
+                      <article className="item-row" key={item.id}>
+                        <div className="item-main">
+                          <strong>{item.name}</strong>
+                          <span>{formatMoney(item.amount)}</span>
+                        </div>
+                        <div className="assignment-grid">
+                          {participants.map((participant) => (
+                            <label key={participant.id} className="assignment-chip">
+                              <input
+                                type="checkbox"
+                                checked={item.assignedTo.includes(participant.id)}
+                                onChange={() => toggleAssignment(item.id, participant.id)}
+                                {...extensionHydrationProps}
+                              />
+                              {participant.name}
+                            </label>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
             </section>
           </div>
 
@@ -470,31 +623,33 @@ export default function NewBillPage() {
                 <strong>{formatMoney(billTotal)}</strong>
               </div>
 
-              <div className="adjustments">
-                <label>
-                  Tax
-                  <input type="number" step="0.01" value={tax} onChange={(event) => setTax(Number(event.target.value))} />
-                </label>
-                <label>
-                  Service
-                  <input type="number" step="0.01" value={service} onChange={(event) => setService(Number(event.target.value))} />
-                </label>
-                <label>
-                  Discount
-                  <input type="number" step="0.01" value={discount} onChange={(event) => setDiscount(Number(event.target.value))} />
-                </label>
-              </div>
+              {splitMode === "itemized" ? (
+                <div className="adjustments">
+                  <label>
+                    Tax
+                    <input inputMode="decimal" placeholder="0.00" value={taxInput} onChange={(event) => setTaxInput(event.target.value)} {...extensionHydrationProps} />
+                  </label>
+                  <label>
+                    Service
+                    <input inputMode="decimal" placeholder="0.00" value={serviceInput} onChange={(event) => setServiceInput(event.target.value)} {...extensionHydrationProps} />
+                  </label>
+                  <label>
+                    Discount
+                    <input inputMode="decimal" placeholder="0.00" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} {...extensionHydrationProps} />
+                  </label>
+                </div>
+              ) : null}
 
               <div className="rounding-box">
                 <span>Rounding</span>
                 <div className="segmented">
-                  <button type="button" className={roundingMode === "exact" ? "active" : ""} onClick={() => setRoundingMode("exact")}>
+                  <button type="button" className={roundingMode === "exact" ? "active" : ""} onClick={() => setRoundingMode("exact")} {...extensionHydrationProps}>
                     Exact
                   </button>
-                  <button type="button" className={roundingMode === "down" ? "active" : ""} onClick={() => setRoundingMode("down")}>
+                  <button type="button" className={roundingMode === "down" ? "active" : ""} onClick={() => setRoundingMode("down")} {...extensionHydrationProps}>
                     Down
                   </button>
-                  <button type="button" className={roundingMode === "up" ? "active" : ""} onClick={() => setRoundingMode("up")}>
+                  <button type="button" className={roundingMode === "up" ? "active" : ""} onClick={() => setRoundingMode("up")} {...extensionHydrationProps}>
                     Up
                   </button>
                 </div>
@@ -508,18 +663,24 @@ export default function NewBillPage() {
               ) : null}
 
               <div className="results-list">
-                {splitResults.map((result) => (
+                {payableResults.length === 0 ? (
+                  <div className="empty-state">No one else owes this bill yet.</div>
+                ) : null}
+                {payableResults.map((result) => (
                   <article key={result.id}>
                     <div>
                       <strong>{result.name}</strong>
                       <span>
-                        Items {formatMoney(result.itemShare)} - Tax {formatMoney(result.taxShare)} - Service {formatMoney(result.serviceShare)}
+                        {splitMode === "equal"
+                          ? `Share ${formatMoney(result.rounded)}`
+                          : `Items ${formatMoney(result.itemShare)} - Tax ${formatMoney(result.taxShare)} - Service ${formatMoney(result.serviceShare)}`}
                       </span>
                     </div>
                     <b>{formatMoney(result.rounded)}</b>
                     <select
                       value={result.status}
                       onChange={(event) => updateStatus(result.id, event.target.value as SettlementStatus)}
+                      {...extensionHydrationProps}
                     >
                       <option value="unpaid">Unpaid</option>
                       <option value="pending">Pending</option>

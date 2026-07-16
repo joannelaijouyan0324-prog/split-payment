@@ -41,7 +41,7 @@ export default function NewBillStartPage() {
         source,
         receiptFile: source === "upload" ? receiptFile : null,
       });
-      router.push(`/bills/new/review?billId=${bill.id}`);
+      router.push(`/bills/new/review?billId=${bill.id}&source=${source}`);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not create this bill.");
     } finally {

@@ -24,7 +24,7 @@ export async function createBillDraft({ owner, source, receiptFile }: CreateBill
       title,
       currency: "MYR",
       status: "draft",
-      split_mode: "itemized",
+      split_mode: source === "manual" ? "equal" : "itemized",
       rounding_mode: "exact",
     })
     .select("id, share_token")
@@ -78,4 +78,3 @@ export async function createBillDraft({ owner, source, receiptFile }: CreateBill
 
   return bill;
 }
-

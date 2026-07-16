@@ -16,7 +16,9 @@ export default function StartPage() {
       <section className="start-card">
         <div className="start-user-row">
           <span>{displayName ? `Hi, ${displayName}` : "Name holder not set"}</span>
-          <Link href="/login">{displayName ? "Change" : "Set name"}</Link>
+          <Link className="text-link" href="/login">
+            {displayName ? "Change" : "Set name"}
+          </Link>
         </div>
         <div className="start-actions">
           <Link className="start-action primary-start" href="/bills/new">
@@ -32,4 +34,3 @@ export default function StartPage() {
     </main>
   );
 }
-

@@ -26,6 +26,20 @@ function formatMinor(amountMinor: number, currency: string) {
 export default function BillsPage() {
   const [bills, setBills] = useState<BillRow[]>([]);
   const [message, setMessage] = useState("Loading bills...");
+  const [billToDelete, setBillToDelete] = useState<BillRow | null>(null);
+
+  async function deleteBill() {
+    if (!billToDelete) return;
+    const { error } = await supabase.from("bills").delete().eq("id", billToDelete.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setBills((current) => current.filter((item) => item.id !== billToDelete.id));
+    setMessage(`${billToDelete.title} deleted.`);
+    setBillToDelete(null);
+  }
 
   useEffect(() => {
     async function loadBills() {
@@ -72,19 +86,49 @@ export default function BillsPage() {
           {message ? <div className="notice">{message}</div> : null}
           <div className="history-list">
             {bills.map((bill) => (
-              <Link className="history-row" href={`/bills/new/review?billId=${bill.id}`} key={bill.id}>
-                <div>
-                  <strong>{bill.title}</strong>
-                  <span>{bill.merchant_name || new Date(bill.created_at).toLocaleDateString("en-MY")}</span>
-                </div>
-                <b>{formatMinor(bill.total_minor, bill.currency)}</b>
-                <span className="status-pill">{bill.status}</span>
-              </Link>
+              <article className="history-row-shell" key={bill.id}>
+                <Link className="history-row" href={`/bills/new/review?billId=${bill.id}`}>
+                  <div>
+                    <strong>{bill.title}</strong>
+                    <span>{bill.merchant_name || "No merchant"}</span>
+                  </div>
+                  <div className="history-amount">
+                    <b>{formatMinor(bill.total_minor, bill.currency)}</b>
+                    <span>{new Date(bill.created_at).toLocaleDateString("en-MY")}</span>
+                  </div>
+                  <span className="status-pill">{bill.status}</span>
+                </Link>
+                <button
+                  type="button"
+                  className="text-link remove-chip history-delete"
+                  onClick={() => setBillToDelete(bill)}
+                  suppressHydrationWarning
+                >
+                  Delete
+                </button>
+              </article>
             ))}
           </div>
         </section>
       </section>
+      {billToDelete ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-bill-title">
+            <h2 id="delete-bill-title">Delete bill?</h2>
+            <p>
+              Delete <strong>{billToDelete.title}</strong>? This cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="cancel-button" onClick={() => setBillToDelete(null)}>
+                Cancel
+              </button>
+              <button type="button" className="danger-button" onClick={deleteBill}>
+                Delete
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
-

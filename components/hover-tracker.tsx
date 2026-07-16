@@ -4,7 +4,11 @@ import { useEffect } from "react";
 
 const clickableSelector = [
   "button",
-  "a",
+  "a.start-action",
+  "a.quick-card",
+  "a.history-row",
+  "a.link-button",
+  "a.back-link",
   "label.file-control",
   "label.capture-action",
 ].join(",");
