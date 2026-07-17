@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/app-nav";
+import { ToastNotice } from "@/components/toast-notice";
 import { supabase } from "@/lib/supabase/client";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -79,6 +81,7 @@ const extensionHydrationProps = {
 };
 
 export default function NewBillPage() {
+  const router = useRouter();
   const receiptInputRef = useRef<HTMLInputElement | null>(null);
   const [activeBillId, setActiveBillId] = useState("");
   const [billSource, setBillSource] = useState<"manual" | "scan" | "upload">("manual");
@@ -258,15 +261,20 @@ export default function NewBillPage() {
         split_mode: splitMode,
         rounding_mode: roundingMode,
         subtotal_minor: Math.round(itemSubtotal * 100),
-        tax_minor: splitMode === "equal" ? 0 : Math.round(tax * 100),
-        service_charge_minor: splitMode === "equal" ? 0 : Math.round(service * 100),
-        discount_minor: splitMode === "equal" ? 0 : Math.round(discount * 100),
+        tax_minor: Math.round(tax * 100),
+        service_charge_minor: Math.round(service * 100),
+        discount_minor: Math.round(discount * 100),
         total_minor: Math.round(billTotal * 100),
         updated_at: new Date().toISOString(),
       })
       .eq("id", activeBillId);
 
-    setMessage(error ? error.message : "Draft saved to Supabase.");
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    router.push("/bills");
   }
 
   const tax = parseAmount(taxInput);
@@ -279,10 +287,10 @@ export default function NewBillPage() {
   );
 
   const isManualBill = billSource === "manual";
-  const equalTotal = parseAmount(equalSubtotalInput);
-  const itemSubtotal = splitMode === "equal" ? equalTotal : itemizedSubtotal;
+  const equalSubtotal = parseAmount(equalSubtotalInput);
+  const itemSubtotal = splitMode === "equal" ? equalSubtotal : itemizedSubtotal;
 
-  const billTotal = splitMode === "equal" ? equalTotal : itemSubtotal + tax + service - discount;
+  const billTotal = itemSubtotal + tax + service - discount;
   const payerId = participants.find((participant) => participant.name === paidBy)?.id ?? "";
 
   const splitResults = useMemo(() => {
@@ -291,7 +299,7 @@ export default function NewBillPage() {
       const itemShare =
         splitMode === "equal"
           ? participantCount > 0
-            ? billTotal / participantCount
+            ? itemSubtotal / participantCount
             : 0
           : items.reduce((total, item) => {
               if (!item.assignedTo.includes(participant.id) || item.assignedTo.length === 0) {
@@ -301,9 +309,9 @@ export default function NewBillPage() {
             }, 0);
 
       const ratio = itemSubtotal > 0 ? itemShare / itemSubtotal : 0;
-      const taxShare = splitMode === "equal" ? 0 : tax * ratio;
-      const serviceShare = splitMode === "equal" ? 0 : service * ratio;
-      const discountShare = splitMode === "equal" ? 0 : discount * ratio;
+      const taxShare = tax * ratio;
+      const serviceShare = service * ratio;
+      const discountShare = discount * ratio;
       const exact = itemShare + taxShare + serviceShare - discountShare;
       const rounded = roundAmount(exact, roundingMode);
 
@@ -569,6 +577,7 @@ export default function NewBillPage() {
   return (
     <main className="app-shell">
       <AppNav active="new" subtitle="Receipt review" />
+      <ToastNotice message={message} />
 
       <section className="workspace">
         <header className="topbar">
@@ -592,8 +601,6 @@ export default function NewBillPage() {
             </button>
           </div>
         </header>
-
-        <div className="notice">{message}</div>
 
         <div className="workspace-grid">
           <div className="main-column">
@@ -747,7 +754,7 @@ export default function NewBillPage() {
               <div className="panel-heading">
                 <div>
                   <span className="eyebrow">Items</span>
-                  <h2>{splitMode === "equal" ? "Equal split total" : isManualBill ? "Manual items" : "Receipt items"}</h2>
+                  <h2>{splitMode === "equal" ? "Equal split subtotal" : isManualBill ? "Manual items" : "Receipt items"}</h2>
                 </div>
                 <div className="segmented">
                   <button
@@ -771,7 +778,7 @@ export default function NewBillPage() {
 
               {splitMode === "equal" ? (
                 <label className="single-field">
-                  Total amount
+                  Bill subtotal
                   <input
                     inputMode="decimal"
                     placeholder="0.00"
@@ -854,22 +861,20 @@ export default function NewBillPage() {
                 <strong>{displayMoney(billTotal)}</strong>
               </div>
 
-              {splitMode === "itemized" ? (
-                <div className="adjustments">
-                  <label>
-                    Additional tax
-                    <input inputMode="decimal" placeholder="0.00" value={taxInput} onChange={(event) => setTaxInput(event.target.value)} {...extensionHydrationProps} />
-                  </label>
-                  <label>
-                    Service
-                    <input inputMode="decimal" placeholder="0.00" value={serviceInput} onChange={(event) => setServiceInput(event.target.value)} {...extensionHydrationProps} />
-                  </label>
-                  <label>
-                    Discount
-                    <input inputMode="decimal" placeholder="0.00" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} {...extensionHydrationProps} />
-                  </label>
-                </div>
-              ) : null}
+              <div className="adjustments">
+                <label>
+                  Additional tax
+                  <input inputMode="decimal" placeholder="0.00" value={taxInput} onChange={(event) => setTaxInput(event.target.value)} {...extensionHydrationProps} />
+                </label>
+                <label>
+                  Service
+                  <input inputMode="decimal" placeholder="0.00" value={serviceInput} onChange={(event) => setServiceInput(event.target.value)} {...extensionHydrationProps} />
+                </label>
+                <label>
+                  Discount
+                  <input inputMode="decimal" placeholder="0.00" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} {...extensionHydrationProps} />
+                </label>
+              </div>
 
               {includedTaxMinor > 0 && splitMode === "itemized" ? (
                 <p className="included-tax-note">

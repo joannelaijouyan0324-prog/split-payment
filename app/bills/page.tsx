@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppNav } from "@/components/app-nav";
+import { ToastNotice } from "@/components/toast-notice";
 import { getLocalUser } from "@/lib/local-user";
 import { supabase } from "@/lib/supabase/client";
 
@@ -70,6 +71,7 @@ export default function BillsPage() {
   return (
     <main className="app-shell">
       <AppNav active="bills" subtitle="Bill history" />
+      <ToastNotice message={message} />
       <section className="workspace">
         <header className="topbar">
           <div>
@@ -83,7 +85,6 @@ export default function BillsPage() {
           </Link>
         </header>
         <section className="panel">
-          {message ? <div className="notice">{message}</div> : null}
           <div className="history-list">
             {bills.map((bill) => (
               <article className="history-row-shell" key={bill.id}>

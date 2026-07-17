@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppNav } from "@/components/app-nav";
+import { ToastNotice } from "@/components/toast-notice";
 import { getLocalUser } from "@/lib/local-user";
 import { supabase } from "@/lib/supabase/client";
 
@@ -94,6 +95,7 @@ export default function SettlementsPage() {
   return (
     <main className="app-shell">
       <AppNav active="settlements" subtitle="Settlement tracking" />
+      <ToastNotice message={message} />
       <section className="workspace">
         <header className="topbar">
           <div>
@@ -104,7 +106,6 @@ export default function SettlementsPage() {
           </div>
         </header>
         <section className="panel">
-          {message ? <div className="notice">{message}</div> : null}
           <div className="history-list">
             {rows.map((row) => (
               <article className="history-row" key={row.id}>
