@@ -70,6 +70,10 @@ function cleanFileName(fileName: string) {
   return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
 }
 
+function normalizeParticipantName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 const extensionHydrationProps = {
   suppressHydrationWarning: true,
 };
@@ -327,8 +331,9 @@ export default function NewBillPage() {
       setParticipantError("Enter a participant name.");
       return;
     }
+    const normalizedName = normalizeParticipantName(cleanName);
     const id = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    if (participants.some((participant) => participant.id === id)) {
+    if (participants.some((participant) => normalizeParticipantName(participant.name) === normalizedName)) {
       setParticipantError(`${cleanName} is already in this bill.`);
       return;
     }
@@ -505,9 +510,9 @@ export default function NewBillPage() {
         })),
       );
       setMessage(
-        parsed.provider === "tesseract+openai"
-          ? `OpenAI parsed the OCR text. ${parsed.itemCount ?? 0} item(s) found. Please review before sharing.`
-          : `Receipt OCR finished with local parsing. ${parsed.itemCount ?? 0} item(s) found. ${parsed.warning ? parsed.warning : "Please review before sharing."}`,
+        parsed.provider === "tesseract+gemini"
+          ? `Gemini parsed the OCR text. ${parsed.itemCount ?? 0} item(s) found. Please review before sharing.`
+          : `Backup parser used. ${parsed.itemCount ?? 0} item(s) found. ${parsed.warning ? parsed.warning : "Gemini was not available, so local parsing was used."}`,
       );
     } catch (error) {
       setReceiptName(previous.name);

@@ -11,6 +11,8 @@ type ParsedReceipt = {
   service: number;
   discount: number;
   total: number;
+  printedSubtotal: number;
+  printedTotal: number;
   items: Array<{
     name: string;
     quantity: number;
@@ -18,6 +20,8 @@ type ParsedReceipt = {
     total: number;
   }>;
 };
+
+type ParserSource = "local" | "gemini";
 
 function getSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -163,12 +167,12 @@ function parseReceiptText(ocrText: string) {
     .map((line) => line.trim())
     .filter(Boolean);
   const keywordAmounts: Record<string, number | null> = {
-    subtotal: null,
+    printedSubtotal: null,
+    printedTotal: null,
     tax: null,
     includedTax: null,
     service: null,
     discount: null,
-    total: null,
   };
   const items: Array<{ name: string; quantity: number; unit: number; total: number }> = [];
 
@@ -197,12 +201,12 @@ function parseReceiptText(ocrText: string) {
     }
 
     if (/\b(sub\s*total|subtotal)\b/.test(lower)) {
-      keywordAmounts.subtotal = amountMatch.amount;
+      keywordAmounts.printedSubtotal = amountMatch.amount;
       continue;
     }
 
     if (/\b(total|amount due|grand total|nett|net total)\b/.test(lower)) {
-      keywordAmounts.total = amountMatch.amount;
+      keywordAmounts.printedTotal = amountMatch.amount;
       continue;
     }
 
@@ -211,11 +215,11 @@ function parseReceiptText(ocrText: string) {
   }
 
   const itemSubtotal = items.reduce((sum, item) => sum + item.total, 0);
-  const subtotal = keywordAmounts.subtotal ?? itemSubtotal;
+  const subtotal = itemSubtotal;
   const tax = keywordAmounts.tax ?? 0;
   const service = keywordAmounts.service ?? 0;
   const discount = keywordAmounts.discount ?? 0;
-  const total = keywordAmounts.total ?? subtotal + tax + service - discount;
+  const total = subtotal + tax + service - discount;
 
   return {
     subtotal,
@@ -224,6 +228,8 @@ function parseReceiptText(ocrText: string) {
     service,
     discount,
     total,
+    printedSubtotal: keywordAmounts.printedSubtotal ?? 0,
+    printedTotal: keywordAmounts.printedTotal ?? 0,
     currency: detectCurrency(ocrText),
     items,
   };
@@ -234,15 +240,14 @@ function extractJson(text: string) {
   const raw = fenced?.[1] ?? text;
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
-  if (start < 0 || end < 0) throw new Error("OpenAI did not return JSON.");
+  if (start < 0 || end < 0) throw new Error("AI parser did not return JSON.");
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-function getOutputText(payload: any) {
-  if (typeof payload?.output_text === "string") return payload.output_text;
-  return (payload?.output ?? [])
-    .flatMap((output: any) => output?.content ?? [])
-    .map((content: any) => content?.text ?? "")
+function getGeminiOutputText(payload: any) {
+  return (payload?.candidates ?? [])
+    .flatMap((candidate: any) => candidate?.content?.parts ?? [])
+    .map((part: any) => part?.text ?? "")
     .filter(Boolean)
     .join("\n");
 }
@@ -265,12 +270,14 @@ function normalizeParsedReceipt(value: any, fallbackCurrency: string): ParsedRec
     : [];
 
   const itemSubtotal = items.reduce((sum, item) => sum + item.total, 0);
-  const subtotal = Number(value?.subtotal ?? itemSubtotal) || itemSubtotal;
+  const subtotal = itemSubtotal;
   const tax = Number(value?.tax ?? 0) || 0;
   const includedTax = Number(value?.includedTax ?? 0) || 0;
   const service = Number(value?.service ?? 0) || 0;
   const discount = Number(value?.discount ?? 0) || 0;
-  const total = Number(value?.total ?? subtotal + tax + service - discount) || 0;
+  const total = subtotal + tax + service - discount;
+  const printedSubtotal = Number(value?.printedSubtotal ?? value?.receiptSubtotal ?? value?.subtotal ?? 0) || 0;
+  const printedTotal = Number(value?.printedTotal ?? value?.receiptTotal ?? value?.total ?? 0) || 0;
 
   return {
     currency: String(value?.currency || fallbackCurrency || "MYR").toUpperCase(),
@@ -280,83 +287,87 @@ function normalizeParsedReceipt(value: any, fallbackCurrency: string): ParsedRec
     service,
     discount,
     total,
+    printedSubtotal,
+    printedTotal,
     items,
   };
 }
 
-async function parseReceiptTextWithOpenAI(ocrText: string, fallback: ParsedReceipt) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { parsed: fallback, source: "local" as const };
-  }
-
-  const prompt = `You are parsing OCR text from a restaurant receipt.
-Return JSON only. Do not include explanations.
+function buildReceiptParserPrompt(ocrText: string) {
+  const prompt = `Parse restaurant receipt OCR into compact JSON only. No markdown. No explanation.
 
 Rules:
 - Extract only real purchased line items.
 - Ignore receipt number, server, table, card/payment info, tax ID, barcode, dates, URLs, and thank-you text.
 - If an item line starts with quantity like "2X CAESAR SALAD $24.00", quantity is 2 and total is 24.00.
 - If tax says included/incl/inclusive/MwSt/MuSt, put it in includedTax, not tax.
-- tax means additional tax that should be added to subtotal.
+- tax means additional tax that should be added to the item subtotal.
 - includedTax is informational and already inside item prices/total.
+- The app code calculates subtotal and total from items, tax, service, and discount. Put printed subtotal in printedSubtotal and printed total in printedTotal only for validation.
 - Use major currency units, not cents.
 - If a value is missing, use 0.
 
-JSON shape:
-{
-  "currency": "MYR|USD|SGD|CHF|EUR|GBP|...",
-  "subtotal": number,
-  "tax": number,
-  "includedTax": number,
-  "service": number,
-  "discount": number,
-  "total": number,
-  "items": [
-    { "name": string, "quantity": number, "unit": number, "total": number }
-  ]
-}
+JSON shape: {"currency":"MYR|USD|SGD|CHF|EUR|GBP|...","tax":number,"includedTax":number,"service":number,"discount":number,"printedSubtotal":number,"printedTotal":number,"items":[{"name":string,"quantity":number,"unit":number,"total":number}]}
 
 OCR text:
 ${ocrText}`;
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_RECEIPT_TEXT_MODEL || "gpt-4o-mini",
-      input: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: prompt }],
-        },
-      ],
-      max_output_tokens: 1200,
-    }),
-  });
+  return prompt;
+}
 
-  const payload = await response.json();
-  if (!response.ok) {
+async function parseReceiptTextWithGemini(ocrText: string, fallback: ParsedReceipt) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
     return {
       parsed: fallback,
-      source: "local" as const,
-      warning: payload?.error?.message || "OpenAI text parsing failed.",
+      source: "local" as ParserSource,
+      warning: "Gemini API key is missing. Backup local parser was used.",
     };
   }
 
+  const model = process.env.GEMINI_RECEIPT_TEXT_MODEL || "gemini-3.5-flash";
   try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: buildReceiptParserPrompt(ocrText) }],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0,
+            maxOutputTokens: 4096,
+          },
+        }),
+      },
+    );
+
+    const payload = await response.json();
+    if (!response.ok) {
+      return {
+        parsed: fallback,
+        source: "local" as ParserSource,
+        warning: `Gemini failed: ${payload?.error?.message || "text parsing failed"}. Backup local parser was used.`,
+      };
+    }
+
     return {
-      parsed: normalizeParsedReceipt(extractJson(getOutputText(payload)), fallback.currency),
-      source: "openai" as const,
+      parsed: normalizeParsedReceipt(extractJson(getGeminiOutputText(payload)), fallback.currency),
+      source: "gemini" as ParserSource,
     };
   } catch (error) {
     return {
       parsed: fallback,
-      source: "local" as const,
-      warning: error instanceof Error ? error.message : "OpenAI JSON parsing failed.",
+      source: "local" as ParserSource,
+      warning: `Gemini failed: ${error instanceof Error ? error.message : "JSON parsing failed"}. Backup local parser was used.`,
     };
   }
 }
@@ -384,7 +395,18 @@ export async function POST(request: Request) {
     });
     const ocrText = normalizeOcrText(result.data.text);
     const localParsed = normalizeParsedReceipt(parseReceiptText(ocrText), detectCurrency(ocrText));
-    const { parsed, source, warning } = await parseReceiptTextWithOpenAI(ocrText, localParsed);
+    const { parsed, source, warning } = await parseReceiptTextWithGemini(ocrText, localParsed);
+    const validationWarnings = [warning].filter(Boolean);
+    if (parsed.printedSubtotal > 0 && Math.abs(parsed.printedSubtotal - parsed.subtotal) >= 0.01) {
+      validationWarnings.push(
+        `Receipt check: items add to ${parsed.subtotal.toFixed(2)}, but printed subtotal is ${parsed.printedSubtotal.toFixed(2)}.`,
+      );
+    }
+    if (parsed.printedTotal > 0 && Math.abs(parsed.printedTotal - parsed.total) >= 0.01) {
+      validationWarnings.push(
+        `Receipt check: calculated total is ${parsed.total.toFixed(2)}, but printed total is ${parsed.printedTotal.toFixed(2)}.`,
+      );
+    }
     const supabase = getSupabaseServerClient();
 
     const billPatch = {
@@ -433,7 +455,7 @@ export async function POST(request: Request) {
         .from("receipt_images")
         .update({
         ocr_text: ocrText,
-        ocr_provider: source === "openai" ? "tesseract+openai" : "tesseract",
+        ocr_provider: source === "gemini" ? "tesseract+gemini" : "tesseract",
       })
       .eq("id", receiptImageId);
     }
@@ -444,8 +466,8 @@ export async function POST(request: Request) {
       included_tax_minor: amountToMinor(parsed.includedTax),
       items: savedItems ?? [],
       itemCount: savedItems?.length ?? 0,
-      provider: source === "openai" ? "tesseract+openai" : "tesseract",
-      warning,
+      provider: source === "gemini" ? "tesseract+gemini" : "tesseract",
+      warning: validationWarnings.join(" "),
     });
   } catch (error) {
     return NextResponse.json(
